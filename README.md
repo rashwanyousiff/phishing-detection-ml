@@ -1,1 +1,4 @@
 # phishing-detection-ml
+
+This project compares Logistic Regression, Decision Tree, and Random Forest for detecting phishing websites using URL and page-content features. I trained and evaluated the models on the PhiUSIIL Phishing URL Dataset (235,795 URLs) and ran a cross-dataset evaluation on the UCI Phishing Websites dataset to see how well the results generalize. All code, analysis, and results are in the notebook Phishing_Detection_ML_Project_5.ipynb.
+The datasets are not included here due to file size. Download PhiUSIIL from https://archive.uci.edu/dataset/967/phiusiil+phishing+url+dataset and the UCI Phishing Websites dataset from https://archive.uci.edu/dataset/327/phishing+websites. Place the PhiUSIIL CSV and the phishing+websites/ folder in the same directory as the notebook before running. Dependencies are numpy, pandas, matplotlib, seaborn, and scikit-learn.
