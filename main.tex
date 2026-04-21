@@ -1,0 +1,369 @@
+\documentclass{article}
+\usepackage[preprint,nonatbib]{neurips_2026}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsfonts}
+\usepackage{nicefrac}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{amsmath}
+
+\title{Phishing Website Detection with Machine Learning:\\
+Comparing Three Classifiers Across Two Datasets}
+
+\author{%
+  Yousiff Rashwan \\
+  NetID: yar24 \quad Section: [SECTION\_ID] \\
+  Rutgers University, Spring 2026 \\
+  \texttt{yar24@rutgers.edu}
+}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Phishing pages are a growing problem and catching them automatically is genuinely useful.
+This project explores whether URL and page-content features can reliably separate phishing sites from legitimate ones using three standard classifiers: Logistic Regression, Decision Tree, and Random Forest.
+I trained and tested on the PhiUSIIL Phishing URL Dataset (235,795 URLs, 50 features) and found that all three models score essentially perfectly on it, which raised more questions than it answered.
+Running the same models on the UCI Phishing Websites dataset revealed the actual differences: LR lands at F1 = 0.917, DT at 0.944, and RF at 0.974.
+Looking at which features mattered most, \texttt{URLSimilarityIndex} came out ahead by a large margin, with page-size features like external link count and line-of-code count following behind.
+
+Code: \url{[GITHUB_LINK]}
+
+Video: \url{[VIDEO_LINK]}
+\end{abstract}
+
+\section{Introduction}
+
+Phishing has been around long enough that most people know what it is, yet it keeps working.
+Someone builds a page that mimics a bank or an email login screen, gets a user to type in their password, and that is it.
+The Anti-Phishing Working Group recorded over 5 million attacks in 2023~\cite{apwg2023}, which is a lot even accounting for some overlap and duplicates in how those numbers get counted.
+
+The appeal of a machine learning solution is obvious: if a model can catch a phishing URL before the user ever sees the page, the whole attack falls apart.
+What is less obvious is whether a model trained on one dataset will still work when the next wave of phishing campaigns comes along.
+A system that looks great on a benchmark but misses real-world attacks is not worth much.
+
+My starting point for this project was to build a clean, straightforward pipeline and see how three different classifiers compared.
+I wanted to understand not just which model scored highest, but whether the features the models leaned on actually made sense as phishing signals.
+
+I did not go in expecting perfect scores.
+All three models, including plain Logistic Regression, ended up essentially flawless on PhiUSIIL.
+That was genuinely surprising, and it pushed me to take the cross-dataset evaluation more seriously.
+The second dataset is where you see the real differences between the models.
+
+\section{Related Work}
+\label{sec:related}
+
+The earliest ML work on phishing detection mostly stuck to URL features: how long the URL is, whether the domain looks like an IP address, how many special characters appear, how many subdomains are stacked.
+Whittaker et al.~\cite{whittaker2010} demonstrated that even these basic signals, combined with blacklist matching, produced reasonable detection rates.
+
+Things got more interesting when researchers started pulling features from the page content itself, things like whether the page submits forms to external domains, how many iframes or popups it has, and whether it has the kind of social media footprint a real company would have.
+Tang and Mahmoud~\cite{tang2021} did a broad survey of this space and found that combining URL and content features consistently outperformed URL-only approaches, with Random Forest-style ensembles tending to come out on top.
+
+One concern that kept coming up in the literature was how poorly these models transferred across datasets.
+Zieni et al.~\cite{zieni2023} reviewed over 100 papers and observed that a model trained on data from one time period or collection method often fell apart on data from somewhere else.
+That finding directly motivated my decision to evaluate on a second dataset rather than just reporting PhiUSIIL numbers.
+
+PhiUSIIL itself was introduced by Prasad and Chandra~\cite{prasad2024} partly to fill gaps in older benchmarks.
+They showed near-perfect performance using gradient-boosted trees, and based on my results, the feature set is rich enough that you get similar numbers from much simpler models too.
+
+\section{Data}
+\label{sec:data}
+
+\subsection{PhiUSIIL Phishing URL Dataset}
+
+PhiUSIIL~\cite{uci_phiusiil} has 235,795 labeled URLs spread across 56 columns.
+Five of those columns (FILENAME, URL, Domain, TLD, Title) are text-heavy and do not work as direct numeric inputs, so I dropped them and worked with the remaining 50 features.
+The class breakdown is 134,850 phishing (57.2\%) and 100,945 legitimate (42.8\%), which is close enough to balanced that I did not bother with oversampling.
+No missing values, no duplicate rows.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.68\linewidth]{fig_class_distribution.png}
+  \caption{Class distribution in PhiUSIIL. The 57/43 split is close enough to balanced that no resampling was needed.}
+  \label{fig:class_dist}
+\end{figure}
+
+The 50 remaining features cover URL structure, page content, and some broader context.
+URL-level features capture things like URL length, domain length, TLD type, how many digits or special characters appear, whether the domain is an IP address, and whether the page uses HTTPS.
+Content features count images, CSS files, JavaScript files, iframes, popups, outbound links, self-referencing links, and flag things like hidden form fields, password inputs, and external form submission targets.
+The contextual group includes line-of-code count, title-to-URL similarity scores, robots.txt presence, redirect counts, and keyword flags for terms like Bank, Pay, and Crypto.
+
+\subsubsection{Exploratory data analysis}
+
+Before building any models I did a quick look at five URL and domain-level features to get a sense of how they separated phishing from legitimate pages (Figure~\ref{fig:feat_dist}).
+\texttt{DomainTitleMatchScore} showed the most visible split, which makes intuitive sense: a phishing page pretending to be a bank probably will not have a title that matches its actual domain.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.88\linewidth]{fig_feature_distributions.png}
+  \caption{Distributions of five URL and domain features split by class. \texttt{DomainTitleMatchScore} and \texttt{URLLength} separate most cleanly.}
+  \label{fig:feat_dist}
+\end{figure}
+
+I also looked at pairwise correlations across the 20 features most correlated with the target (Figure~\ref{fig:heatmap}).
+Most pairs are weakly correlated, which is good.
+The one standout is \texttt{URLTitleMatchScore} and \texttt{DomainTitleMatchScore} at r = 0.961, since they are measuring nearly the same thing from slightly different angles.
+I kept both because removing either did not change model behavior in my tests.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.84\linewidth]{fig_correlation_heatmap.png}
+  \caption{Correlation heatmap for the top 20 features by target correlation. Most pairs are weakly correlated. \texttt{URLTitleMatchScore} and \texttt{DomainTitleMatchScore} are the clear exception at r = 0.961.}
+  \label{fig:heatmap}
+\end{figure}
+
+\subsection{UCI Phishing Websites Dataset}
+
+For the second evaluation I used the UCI Phishing Websites dataset~\cite{uci2015}, which comes in ARFF format.
+It has 11,055 websites described by 30 integer features, each encoded as either $-1$, $0$, or $1$ depending on whether the feature is phishing-like, uncertain, or legitimate-like.
+After flipping the label encoding to match my convention (phishing = 1, legitimate = 0), the breakdown is 4,898 phishing and 6,157 legitimate.
+I trained new models on this dataset from scratch using the same 80/20 split, so these numbers are not a transfer test from PhiUSIIL.
+
+\section{Method}
+\label{sec:method}
+
+\subsection{Preprocessing}
+
+All preprocessing runs inside scikit-learn \texttt{Pipeline} objects.
+This prevents any information from the test set leaking into the scaler during training.
+Logistic Regression gets a \texttt{StandardScaler} step because unscaled features will throw off the coefficient magnitudes.
+The tree-based models do not care about scale, so their pipelines just hold the model.
+
+PhiUSIIL was split 80/20 with stratification (seed = 42), giving 188,636 training samples and 47,159 test samples.
+I checked the class imbalance ratio before training and found it at 0.749, above the 0.6 threshold I set for enabling class weighting, so weights stayed off.
+
+\subsection{Models}
+
+\textbf{Logistic Regression (LR)} models the probability of phishing as a sigmoid applied to a weighted sum of features.
+I used L2 regularization with $C = 1.0$ and bumped \texttt{max\_iter} to 1000 to make sure it converged on the larger dataset.
+LR is the easiest model to interpret here because each coefficient directly tells you how much a feature pulls toward or away from a phishing prediction.
+It also acts as a useful baseline: if LR does badly, the signal in the features is probably not linearly structured.
+
+\textbf{Decision Tree (DT)} builds a binary tree by repeatedly finding the split that most reduces Gini impurity at each node.
+I set \texttt{max\_depth = 10} on both datasets to prevent the tree from getting deep enough to memorize individual training examples.
+
+\textbf{Random Forest (RF)} builds 200 trees, each on a bootstrap sample of the data, each choosing features randomly at every split.
+The ensemble averaging is what makes it stronger than a single tree.
+I also ran a randomized hyperparameter search over 20 configurations with 5-fold CV, which found $n\_\text{estimators} = 300$, $\text{max\_depth} = 30$, and $\text{max\_features} = \sqrt{p}$ as best.
+On PhiUSIIL the tuned and default versions perform identically since both hit the ceiling.
+
+\subsection{Evaluation}
+
+I measured accuracy, precision, recall, F1, and AUC on the held-out test split.
+I also ran 5-fold stratified cross-validation on the training set for each model.
+Cross-validation works by splitting the training data into five equal parts, holding out each one in turn while training on the other four, and averaging the scores.
+It gives a less noisy estimate of generalization than a single split.
+
+\section{Evaluation}
+\label{sec:eval}
+
+\subsection{PhiUSIIL Results}
+
+Table~\ref{tab:phiusiil} has both the CV and test scores for PhiUSIIL.
+Every model is at or near 1.0 across the board.
+
+\begin{table}[ht]
+\caption{Results on PhiUSIIL ($n_\text{train} = 188{,}636$; $n_\text{test} = 47{,}159$). CV F1 comes from 5-fold cross-validation on the training set.}
+\label{tab:phiusiil}
+\centering
+\begin{tabular}{lccccc}
+\toprule
+Model & CV F1 & Test Acc & Test Prec & Test Recall & Test AUC \\
+\midrule
+Logistic Regression & 0.9999 & 0.9999 & 0.9998 & 1.0000 & 1.0000 \\
+Decision Tree       & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 \\
+Random Forest       & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The ROC curves in Figure~\ref{fig:roc} all sit flush against the upper-left corner.
+Looking at the confusion matrices in Figure~\ref{fig:cm}, DT and RF both classify every single test sample correctly.
+LR misclassified 6 legitimate pages as phishing and missed zero phishing pages, which is where the 0.9998 precision comes from.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.65\linewidth]{fig_roc_curves.png}
+  \caption{ROC curves on the PhiUSIIL test set. All three lines sit on top of each other at AUC = 1.0000.}
+  \label{fig:roc}
+\end{figure}
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.88\linewidth]{fig_confusion_matrices.png}
+  \caption{Confusion matrices on the PhiUSIIL test set (20,189 legitimate; 26,970 phishing). LR has 6 false positives. DT and RF have none.}
+  \label{fig:cm}
+\end{figure}
+
+The part worth pausing on is that LR, a linear model, hits near-perfect performance here.
+That is not something you usually expect on a real-world classification task.
+It suggests the feature set includes at least one signal that essentially splits the two classes on its own.
+\texttt{URLSimilarityIndex} is the most likely candidate given its feature importance scores.
+When every model scores this well, though, you cannot actually rank them, which is why the second dataset is needed.
+
+\subsection{UCI Phishing Websites Results}
+
+Table~\ref{tab:uci} shows what happens on UCI, where the scores spread out enough to actually compare models.
+
+\begin{table}[ht]
+\caption{Test-set results on UCI Phishing Websites ($n_\text{train} = 8{,}844$; $n_\text{test} = 2{,}211$). The ceiling effect is gone and the differences between models are visible.}
+\label{tab:uci}
+\centering
+\begin{tabular}{lccccc}
+\toprule
+Model & Accuracy & Precision & Recall & F1 & AUC \\
+\midrule
+Logistic Regression     & 0.9281 & 0.9344 & 0.9010 & 0.9174 & 0.9785 \\
+Decision Tree           & 0.9507 & 0.9476 & 0.9408 & 0.9442 & 0.9853 \\
+\textbf{Random Forest}  & \textbf{0.9769} & \textbf{0.9804} & \textbf{0.9673} & \textbf{0.9738} & \textbf{0.9964} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+RF comes out ahead on every metric.
+The F1 gap over LR is 5.6 points; over DT it is 2.9.
+LR's recall sitting at 0.90 is probably the most practically significant number here.
+Missing roughly 1 in 10 phishing pages means 1 in 10 attacks succeed, which is a meaningful failure rate for a security tool.
+
+Figure~\ref{fig:cross} shows both datasets next to each other.
+On PhiUSIIL all three bars (blue) are pinned at the top.
+The UCI bars (orange) show the gap that PhiUSIIL was papering over.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.84\linewidth]{fig_cross_dataset.png}
+  \caption{F1 and AUC on PhiUSIIL (blue) versus UCI Phishing Websites (orange). The PhiUSIIL scores show no differences between models; the UCI scores do.}
+  \label{fig:cross}
+\end{figure}
+
+\subsection{Feature Analysis}
+
+Figure~\ref{fig:rf_imp} shows RF feature importances from mean Gini decrease.
+\texttt{URLSimilarityIndex} (0.1974) and \texttt{NoOfExternalRef} (0.1656) are way out in front.
+After that comes a cluster of page-volume features: \texttt{LineOfCode} (0.1314), \texttt{NoOfImage} (0.1125), \texttt{NoOfSelfRef} (0.0869), and \texttt{NoOfJS} (0.0754).
+Everything else is below 0.034.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.74\linewidth]{fig_rf_feature_importance.png}
+  \caption{RF top-15 feature importances. \texttt{URLSimilarityIndex} leads clearly. Page-volume features fill out the second tier.}
+  \label{fig:rf_imp}
+\end{figure}
+
+\texttt{URLSimilarityIndex} measures how structurally similar a URL is to known phishing templates.
+A page faking a bank login will tend to score high because the URL follows patterns that are well documented in the phishing world.
+\texttt{NoOfExternalRef} counts outbound links, and legitimate sites tend to link out a lot while phishing pages are usually sparse.
+The page-volume group makes similar sense: a real website takes time to build and has images, stylesheets, scripts, and cross-references, while a hastily deployed phishing form often has almost none of those things.
+
+The LR coefficient plot in Figure~\ref{fig:lr_coef} tells a compatible story.
+\texttt{URLSimilarityIndex} has by far the largest positive coefficient at roughly $+7.1$, meaning it pushes very strongly toward a phishing prediction.
+\texttt{IsHTTPS} coming in second at $+4.0$ is initially puzzling since HTTPS is supposed to mean a secure connection.
+The explanation is that modern phishing kits get free certificates through services like Let's Encrypt, so the data shows phishing pages using HTTPS at a higher rate than some older legitimate pages that still run on plain HTTP.
+On the legitimate side, character-ratio features like \texttt{SpacialCharRatioInURL} and \texttt{LetterRatioInURL} are the strongest negative weights, which makes sense because real URLs tend to be mostly alphabetic with conventional punctuation, whereas phishing URLs often look garbled.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.88\linewidth]{fig_lr_coefficients.png}
+  \caption{LR coefficients on PhiUSIIL. Left: features pushing toward phishing. Right: features pushing toward legitimate. \texttt{URLSimilarityIndex} has the largest positive weight at roughly $+7.1$.}
+  \label{fig:lr_coef}
+\end{figure}
+
+\section{Discussion}
+\label{sec:discussion}
+
+The PhiUSIIL results are probably better than they should be.
+Getting perfect scores from LR on a held-out test set almost always means the dataset has a dominant feature that is doing most of the work, and this case is no exception.
+\texttt{URLSimilarityIndex} is likely responsible for most of the separation.
+This does not mean the dataset is bad or the result is fake, it just means the benchmark is not a useful place to rank models against each other.
+You need harder data for that.
+
+The UCI results explain why RF outperforms the others.
+The UCI features are integer codes in $\{-1, 0, 1\}$, which are essentially categorical thresholds.
+Tree-based splits are a natural fit for that kind of structure; LR has to turn threshold behavior into a linear approximation, which works but is less efficient.
+The performance advantage of RF over DT also makes sense given that UCI has only about 8,800 training samples, a regime where ensemble averaging and feature subsampling provide the most variance reduction.
+
+The broader point is just that one dataset is not enough.
+PhiUSIIL would have left the impression that all three models are interchangeable.
+Adding UCI immediately showed a spread of about 6 F1 points from bottom to top.
+More datasets, ideally from different time periods, would give an even clearer picture.
+
+\section{Limitations}
+\label{sec:limitations}
+
+Both datasets are single-time-period snapshots.
+Phishing campaigns change fast, and a model that works well on data from one year may struggle with the techniques attackers use the next year.
+Ideally you would train on earlier data and test on later data, but neither of these datasets is set up for that.
+
+A practical complication is that many of the most useful features require actually loading the page.
+Things like JavaScript file counts, external link counts, and line-of-code totals all depend on fetching and parsing HTML.
+That adds latency and makes the approach less viable as a pre-click URL filter.
+
+On PhiUSIIL, running a hyperparameter search found different settings but produced the same score, which is what you would expect when the baseline is already at 1.0.
+On UCI I only tuned DT depth and RF tree count; LR's regularization strength and other settings were left at defaults.
+
+Two datasets are better than one, but they are still both curated academic benchmarks.
+Results on them may not reflect how the models would hold up against a real phishing campaign collected in the wild.
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+I trained Logistic Regression, Decision Tree, and Random Forest on two phishing datasets.
+On PhiUSIIL, all three score near perfectly, which turned out to say more about the dataset than the models.
+On UCI Phishing Websites, RF finishes at F1 = 0.974, DT at 0.944, and LR at 0.917.
+
+Feature importance and LR coefficients both point to \texttt{URLSimilarityIndex} as the dominant signal, with page-volume features filling in behind it.
+LR's coefficient plot also highlights URL character ratios as some of the strongest signals on the legitimate side, which lines up with how real URLs tend to look compared to phishing ones.
+
+The main thing I would take away from this project is that a benchmark where a linear model scores perfectly is probably too easy to tell you much.
+Running on a second, harder dataset is what actually revealed how the three classifiers compare.
+
+\newpage
+\begin{thebibliography}{10}
+\small
+
+\bibitem{prasad2024}
+Prasad, A., \& Chandra, R. (2024).
+PhiUSIIL: Phishing URL/Website Identification using Intrinsic and Implicit Latent features.
+\textit{Computers \& Security}.
+
+\bibitem{uci_phiusiil}
+UCI ML Repository. PhiUSIIL Phishing URL Dataset (2024).
+\url{https://archive.ics.uci.edu/dataset/967/phiusiil+phishing+url+dataset}
+
+\bibitem{uci2015}
+UCI ML Repository. Phishing Websites Dataset (2015).
+\url{https://archive.ics.uci.edu/dataset/327/phishing+websites}
+
+\bibitem{tang2021}
+Tang, L., \& Mahmoud, Q.~H. (2021).
+A survey of machine learning-based solutions for phishing website detection.
+\textit{Machine Learning and Knowledge Extraction}, 3(3), 672--694.
+
+\bibitem{zieni2023}
+Zieni, R., Massari, L., \& Calzarossa, M.~C. (2023).
+Phishing or not phishing? A survey on the detection of phishing websites.
+\textit{IEEE Access}, 11.
+
+\bibitem{whittaker2010}
+Whittaker, C., Ryner, B., \& Nazif, M. (2010).
+Large-scale automatic classification of phishing pages.
+In \textit{NDSS}.
+
+\bibitem{apwg2023}
+Anti-Phishing Working Group (2023).
+Phishing Activity Trends Report, Q4 2023.
+\url{https://apwg.org/trendsreports/}
+
+\bibitem{sklearn}
+Pedregosa, F., et al.\ (2011).
+Scikit-learn: Machine Learning in Python.
+\textit{JMLR}, 12, 2825--2830.
+
+\end{thebibliography}
+
+\end{document}
