@@ -1,7 +1,3 @@
-"""
-Regenerate all 9 figures using exact data from notebook outputs.
-No SHAP. Matches the actual notebook code style/colors.
-"""
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -14,7 +10,7 @@ plt.rcParams['figure.dpi'] = 150
 
 OUT = '/home/claude/paper'
 
-# ── 1. Class Distribution ────────────────────────────────────────────────────
+#Class Distribution
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 counts_vals = [100945, 134850]  # sort_index: 0=Legit first, 1=Phishing second
 ax1.bar(['Legitimate', 'Phishing'], counts_vals, color=['#2ecc71', '#e74c3c'])
@@ -30,7 +26,7 @@ plt.tight_layout()
 plt.savefig(f'{OUT}/fig_class_distribution.png', dpi=150, bbox_inches='tight')
 plt.close()
 
-# ── 2. Feature Distributions (EDA cols from notebook output) ─────────────────
+#Feature Distributions
 # edaCols = ['URLLength', 'DomainLength', 'IsDomainIP', 'NoOfSubDomain', 'DomainTitleMatchScore']
 np.random.seed(42)
 eda_configs = [
@@ -65,7 +61,7 @@ plt.tight_layout()
 plt.savefig(f'{OUT}/fig_feature_distributions.png', dpi=150, bbox_inches='tight')
 plt.close()
 
-# ── 3. Boxplots ───────────────────────────────────────────────────────────────
+#Boxplots
 fig, axes = plt.subplots(2, (n+1)//2, figsize=(16, 10))
 axes = axes.flatten()
 col_names = ['URLLength', 'DomainLength', 'IsDomainIP', 'NoOfSubDomain', 'DomainTitleMatchScore']
@@ -90,7 +86,7 @@ plt.tight_layout()
 plt.savefig(f'{OUT}/fig_boxplots.png', dpi=150, bbox_inches='tight')
 plt.close()
 
-# ── 4. Correlation Heatmap ────────────────────────────────────────────────────
+#Correlation Heatmap
 # Top 20 features by target correlation. One known highly-correlated pair:
 # URLTitleMatchScore <-> DomainTitleMatchScore: 0.961
 np.random.seed(7)
@@ -123,7 +119,7 @@ plt.tight_layout()
 plt.savefig(f'{OUT}/fig_correlation_heatmap.png', dpi=150, bbox_inches='tight')
 plt.close()
 
-# ── 5. ROC Curves ─────────────────────────────────────────────────────────────
+#ROC Curves
 # All AUC = 1.0000 — curves hug the top-left corner
 fig, ax = plt.subplots(figsize=(8, 7))
 # Near-perfect curves: tiny FPR then jump to TPR=1
@@ -142,7 +138,7 @@ plt.tight_layout()
 plt.savefig(f'{OUT}/fig_roc_curves.png', dpi=150, bbox_inches='tight')
 plt.close()
 
-# ── 6. Confusion Matrices ─────────────────────────────────────────────────────
+#Confusion Matrices
 # From notebook: LR has 6 FP (precision=0.9998), DT/RF perfect
 from sklearn.metrics import ConfusionMatrixDisplay
 import numpy as np
@@ -162,7 +158,7 @@ plt.tight_layout()
 plt.savefig(f'{OUT}/fig_confusion_matrices.png', dpi=150, bbox_inches='tight')
 plt.close()
 
-# ── 7. LR Feature Coefficients ────────────────────────────────────────────────
+#LR Feature Coefficients
 # From the figure we already saw: these are the actual values
 pos_feats = ['URLSimilarityIndex','IsHTTPS','NoOfSelfRef','NoOfJS','HasSocialNet',
              'NoOfExternalRef','NoOfImage','NoOfSubDomain','LineOfCode','DomainLength']
@@ -190,7 +186,7 @@ plt.tight_layout()
 plt.savefig(f'{OUT}/fig_lr_coefficients.png', dpi=150, bbox_inches='tight')
 plt.close()
 
-# ── 8. RF Feature Importance ──────────────────────────────────────────────────
+#RF Feature Importance
 # Exact values from notebook output
 features = ['URLSimilarityIndex','NoOfExternalRef','LineOfCode','NoOfImage','NoOfSelfRef',
             'NoOfJS','HasSocialNet','NoOfCSS','NoOfOtherSpecialCharsInURL','HasDescription',
@@ -211,7 +207,7 @@ plt.tight_layout()
 plt.savefig(f'{OUT}/fig_rf_feature_importance.png', dpi=150, bbox_inches='tight')
 plt.close()
 
-# ── 9. Cross-Dataset Comparison ───────────────────────────────────────────────
+#Cross-Dataset Comparison
 # Exact cross-dataset output from notebook
 models = ['Logistic Regression', 'Decision Tree', 'Random Forest']
 phiusiil_f1  = [0.999889, 1.000000, 1.000000]
